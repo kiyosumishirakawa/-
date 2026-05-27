@@ -9,9 +9,11 @@ const int PIN_TRIG = 5;
 const int PIN_ECHO = 6;
 
 // 距離判定用の定数
-const int CAUTION_DISTANCE = 50;  // 50cm未満で注意
-const int DANGER_DISTANCE = 20;   // 20cm未満で危険
-const int MAX_DISTANCE = 400;     // 測定範囲外判定
+const int TOO_CLOSE_DISTANCE = 5;     // 5cm以下は連続音
+const int DANGER_DISTANCE = 20;       // 20cm未満で危険
+const int CAUTION_DISTANCE = 50;      // 50cm未満で注意
+const int SAFE_OVER_DISTANCE = 100;   // 100cm以上は距離を表示しない
+const int MAX_DISTANCE = 400;         // 測定範囲外判定
 
 // タイミング設定
 const unsigned long SENSOR_INTERVAL = 300;
@@ -86,7 +88,7 @@ void loop() {
   }
 
   // ブザー制御
-  updateBuzzer(currentState, now);
+  updateBuzzer(distanceCm, currentState, now);
 }
 
 // 距離を測定する関数
@@ -100,6 +102,8 @@ float measureDistance() {
 
   duration = pulseIn(PIN_ECHO, HIGH, 30000);
 
+  // Echo信号が返ってこない場合
+  // センサーに近すぎる場合も -1 になるため、Danger扱いにする
   if (duration == 0) {
     return -1;
   }
@@ -110,6 +114,12 @@ float measureDistance() {
 
 // 距離に応じて状態を判定する関数
 int judgeState(float distance) {
+  // 測定不能の場合は、安全側の動作として危険状態にする
+  if (distance == -1) {
+    return STATE_DANGER;
+  }
+
+  // 明らかな異常値のみエラー扱い
   if (distance <= 0 || distance > MAX_DISTANCE) {
     return STATE_ERROR;
   }
@@ -129,6 +139,16 @@ int judgeState(float distance) {
 void updateLCD(float distance, int state) {
   lcd.clear();
 
+  // 測定不能、または5cm以下の場合
+  if ((distance == -1 || distance <= TOO_CLOSE_DISTANCE) && state == STATE_DANGER) {
+    lcd.setCursor(0, 0);
+    lcd.print("Too Close");
+    lcd.setCursor(0, 1);
+    lcd.print("State:Danger");
+    return;
+  }
+
+  // エラー状態
   if (state == STATE_ERROR) {
     lcd.setCursor(0, 0);
     lcd.print("Out of range");
@@ -137,6 +157,16 @@ void updateLCD(float distance, int state) {
     return;
   }
 
+  // 100cm以上の場合は具体的な距離を表示しない
+  if (state == STATE_SAFE && distance >= SAFE_OVER_DISTANCE) {
+    lcd.setCursor(0, 0);
+    lcd.print("Over 100cm");
+    lcd.setCursor(0, 1);
+    lcd.print("State:Safe");
+    return;
+  }
+
+  // 通常の距離表示
   lcd.setCursor(0, 0);
   lcd.print("Dist:");
   lcd.print((int)distance);
@@ -154,7 +184,7 @@ void updateLCD(float distance, int state) {
 }
 
 // 状態に応じてブザーを制御する関数
-void updateBuzzer(int state, unsigned long now) {
+void updateBuzzer(float distance, int state, unsigned long now) {
   if (state == STATE_SAFE || state == STATE_ERROR) {
     noTone(PIN_BUZZER);
     buzzerOn = false;
@@ -163,8 +193,18 @@ void updateBuzzer(int state, unsigned long now) {
 
   if (state == STATE_CAUTION) {
     cautionBeep(now);
-  } else if (state == STATE_DANGER) {
-    dangerBeep(now);
+    return;
+  }
+
+  if (state == STATE_DANGER) {
+    // 測定不能、または5cm以下の場合は連続音
+    if (distance == -1 || distance <= TOO_CLOSE_DISTANCE) {
+      tone(PIN_BUZZER, 1200);
+      buzzerOn = true;
+    } else {
+      // 通常の危険状態は短い間隔で鳴らす
+      dangerBeep(now);
+    }
   }
 }
 
