@@ -1,237 +1,69 @@
-#include <LiquidCrystal.h>
+# 成果発表レポート
 
-// LCD1602: RS, E, D4, D5, D6, D7
-LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
+> 記入者: CHEN MINHAO　グループ: （グループID）　日付: 2026/05/27
 
-// ピン定義
-const int PIN_BUZZER = 3;
-const int PIN_TRIG = 5;
-const int PIN_ECHO = 6;
+## 1. 何を作ったか（30秒）
 
-// 距離判定用の定数
-const int TOO_CLOSE_DISTANCE = 5;     // 5cm以下は連続音
-const int DANGER_DISTANCE = 20;       // 20cm未満で危険
-const int CAUTION_DISTANCE = 50;      // 50cm未満で注意
-const int SAFE_OVER_DISTANCE = 100;   // 100cm以上は距離を表示しない
-const int MAX_DISTANCE = 400;         // 測定範囲外判定
+ガジェット名：  
+簡易バックソナー表示装置
 
-// タイミング設定
-const unsigned long SENSOR_INTERVAL = 300;
-const unsigned long LCD_INTERVAL = 300;
-const unsigned long CAUTION_INTERVAL = 500;
-const unsigned long DANGER_INTERVAL = 200;
+ひと言で説明：  
+超音波センサーで障害物までの距離を測定し、LCDとブザーで危険を知らせる装置です。
 
-// 状態定義
-const int STATE_MEASURING = 1;
-const int STATE_SAFE = 2;
-const int STATE_CAUTION = 3;
-const int STATE_DANGER = 4;
-const int STATE_ERROR = 5;
+## 使った部品：
 
-// グローバル変数
-long duration = 0;
-float distanceCm = 0.0;
-int currentState = STATE_MEASURING;
+* Arduino UNO R3
+* LCD1602
+* Ultrasonic Sensor
+* Passive Buzzer
+* 10K Potentiometer
+* Breadboard
+* Jumper Wire
+* USB Cable
+## 2. 設計で考えたこと（15秒）
 
-unsigned long lastMillisSensor = 0;
-unsigned long lastMillisLCD = 0;
-unsigned long lastMillisBuzzer = 0;
+車のバックソナーをイメージし、距離によってSafe、Caution、Dangerを切り替える設計にしました。  
+また、LCDには状態だけでなく距離も表示し、利用者が障害物までの距離を分かりやすく確認できるようにしました。
+## 3. できたこと・できなかったこと（30秒）
 
-bool buzzerOn = false;
+## 動いたもの：
 
-void setup() {
-  // LCD初期化
-  lcd.begin(16, 2);
-  lcd.clear();
+超音波センサーで距離を測定し、LCDに距離と状態を表示できました。  
+また、距離が20cm未満のときはDanger、20cm以上50cm未満のときはCaution、50cm以上のときはSafeとして動作しました。  
+Cautionではブザーをゆっくり鳴らし、Dangerでは短い間隔、または近すぎる場合に連続音を鳴らすことができました。
 
-  // ピンモード設定
-  pinMode(PIN_TRIG, OUTPUT);
-  pinMode(PIN_ECHO, INPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
+## 動かなかった・間に合わなかったもの：
 
-  // ブザー停止
-  noTone(PIN_BUZZER);
+LEDによる状態表示は、今回は実装しませんでした。  
+まずは距離測定、LCD表示、ブザー警告の基本機能を優先しました。
 
-  // デバッグ用
-  Serial.begin(9600);
+* なぜ動かなかったか（わかる範囲で）：  
+限られた時間の中で、基本機能の安定動作を優先したためです。
+## 4. 一番苦労したこと、どう乗り越えたか（30秒）
 
-  // 起動表示
-  lcd.setCursor(0, 0);
-  lcd.print("Back Sonar");
-  lcd.setCursor(0, 1);
-  lcd.print("Starting...");
-  delay(1000);
+何が起きたか：  
+最初はLCDの表示や、超音波センサーの測定値の扱いに苦労しました。特に、物体がセンサーに近すぎる場合に距離が-1として出力されることがありました。
 
-  lcd.clear();
-}
+どう対処したか：  
+LCD、超音波センサー、ブザーを一つずつ単体テストし、正常に動くことを確認してから統合しました。  
+また、-1が出る場合は近すぎる状態として扱い、Danger表示とブザー警告を出すように処理を修正しました。
 
-void loop() {
-  unsigned long now = millis();
+そこから何がわかったか：  
+いきなり全部を組み合わせるより、部品ごとに確認してから統合した方が、原因を特定しやすいことが分かりました。
+## 5. 学んだこと・今後の展望（25秒）
 
-  // 一定周期ごとに距離測定
-  if (now - lastMillisSensor >= SENSOR_INTERVAL) {
-    lastMillisSensor = now;
+## 学んだこと：
 
-    distanceCm = measureDistance();
-    currentState = judgeState(distanceCm);
+センサー入力、LCD表示、ブザー出力を組み合わせることで、入力・処理・出力の流れを具体的に理解できました。  
+また、delayではなくmillisを使うことで、ブザー制御中でも距離測定やLCD更新を止めずに処理できることを学びました。
 
-    Serial.print("Distance: ");
-    Serial.print(distanceCm);
-    Serial.print(" cm, State: ");
-    Serial.println(currentState);
-  }
+今後の展望（この仕組みを発展させるなら）：
 
-  // 一定周期ごとにLCD表示更新
-  if (now - lastMillisLCD >= LCD_INTERVAL) {
-    lastMillisLCD = now;
-    updateLCD(distanceCm, currentState);
-  }
+* LEDを追加して、Safe、Caution、Dangerを色でも分かるようにする
+* 距離の境界値を調整できるようにする
+* 実車に近い環境でも安定して測定できるようにする
+## 6. 発表で見せたいもの（メモ）
 
-  // ブザー制御
-  updateBuzzer(distanceCm, currentState, now);
-}
-
-// 距離を測定する関数
-float measureDistance() {
-  digitalWrite(PIN_TRIG, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(PIN_TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(PIN_TRIG, LOW);
-
-  duration = pulseIn(PIN_ECHO, HIGH, 30000);
-
-  // Echo信号が返ってこない場合
-  // センサーに近すぎる場合も -1 になるため、Danger扱いにする
-  if (duration == 0) {
-    return -1;
-  }
-
-  float distance = duration * 0.0343 / 2;
-  return distance;
-}
-
-// 距離に応じて状態を判定する関数
-int judgeState(float distance) {
-  // 測定不能の場合は、安全側の動作として危険状態にする
-  if (distance == -1) {
-    return STATE_DANGER;
-  }
-
-  // 明らかな異常値のみエラー扱い
-  if (distance <= 0 || distance > MAX_DISTANCE) {
-    return STATE_ERROR;
-  }
-
-  if (distance < DANGER_DISTANCE) {
-    return STATE_DANGER;
-  }
-
-  if (distance < CAUTION_DISTANCE) {
-    return STATE_CAUTION;
-  }
-
-  return STATE_SAFE;
-}
-
-// LCD表示を更新する関数
-void updateLCD(float distance, int state) {
-  lcd.clear();
-
-  // 測定不能、または5cm以下の場合
-  if ((distance == -1 || distance <= TOO_CLOSE_DISTANCE) && state == STATE_DANGER) {
-    lcd.setCursor(0, 0);
-    lcd.print("Too Close");
-    lcd.setCursor(0, 1);
-    lcd.print("State:Danger");
-    return;
-  }
-
-  // エラー状態
-  if (state == STATE_ERROR) {
-    lcd.setCursor(0, 0);
-    lcd.print("Out of range");
-    lcd.setCursor(0, 1);
-    lcd.print("No object");
-    return;
-  }
-
-  // 100cm以上の場合は具体的な距離を表示しない
-  if (state == STATE_SAFE && distance >= SAFE_OVER_DISTANCE) {
-    lcd.setCursor(0, 0);
-    lcd.print("Over 100cm");
-    lcd.setCursor(0, 1);
-    lcd.print("State:Safe");
-    return;
-  }
-
-  // 通常の距離表示
-  lcd.setCursor(0, 0);
-  lcd.print("Dist:");
-  lcd.print((int)distance);
-  lcd.print("cm");
-
-  lcd.setCursor(0, 1);
-
-  if (state == STATE_SAFE) {
-    lcd.print("State:Safe");
-  } else if (state == STATE_CAUTION) {
-    lcd.print("State:Caution");
-  } else if (state == STATE_DANGER) {
-    lcd.print("State:Danger");
-  }
-}
-
-// 状態に応じてブザーを制御する関数
-void updateBuzzer(float distance, int state, unsigned long now) {
-  if (state == STATE_SAFE || state == STATE_ERROR) {
-    noTone(PIN_BUZZER);
-    buzzerOn = false;
-    return;
-  }
-
-  if (state == STATE_CAUTION) {
-    cautionBeep(now);
-    return;
-  }
-
-  if (state == STATE_DANGER) {
-    // 測定不能、または5cm以下の場合は連続音
-    if (distance == -1 || distance <= TOO_CLOSE_DISTANCE) {
-      tone(PIN_BUZZER, 1200);
-      buzzerOn = true;
-    } else {
-      // 通常の危険状態は短い間隔で鳴らす
-      dangerBeep(now);
-    }
-  }
-}
-
-// 注意状態のブザー制御
-void cautionBeep(unsigned long now) {
-  if (now - lastMillisBuzzer >= CAUTION_INTERVAL) {
-    lastMillisBuzzer = now;
-    buzzerOn = !buzzerOn;
-
-    if (buzzerOn) {
-      tone(PIN_BUZZER, 800);
-    } else {
-      noTone(PIN_BUZZER);
-    }
-  }
-}
-
-// 危険状態のブザー制御
-void dangerBeep(unsigned long now) {
-  if (now - lastMillisBuzzer >= DANGER_INTERVAL) {
-    lastMillisBuzzer = now;
-    buzzerOn = !buzzerOn;
-
-    if (buzzerOn) {
-      tone(PIN_BUZZER, 1200);
-    } else {
-      noTone(PIN_BUZZER);
-    }
-  }
-}
+* LCDに距離と状態が表示される様子
+* 物体を近づけるとSafe、Caution、Dangerが切り替わる様子
+* 距離が近いとブザーの鳴り方が変わる様子
