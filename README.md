@@ -1,20 +1,24 @@
 // ----------------------------------------------------
-// タイマーガジェット Step2版
-// - 開始ボタンで 9 から 0 までカウントダウン
-// - カウント中に短押しで一時停止
-// - 一時停止中に短押しで再開
-// - 長押しで 9 にリセット
-// - delay() を使わず millis() で処理
+// 4Digit 7-Segment Display 最小测试版
+// 目的：通过74HC595 + 动态点灯显示 1234
 // ----------------------------------------------------
 
-// --- ピン定義 ---
-const int PIN_DATA  = 8;   // 74HC595 DS
-const int PIN_LATCH = 12;  // 74HC595 STCP
-const int PIN_CLOCK = 13;  // 74HC595 SHCP
-const int PIN_BTN   = 2;   // タクトスイッチ
-const int PIN_BUZZ  = 9;   // アクティブブザー
+// --- 74HC595 ピン定義 ---
+const int PIN_DATA  = 8;   // DS
+const int PIN_LATCH = 12;  // STCP
+const int PIN_CLOCK = 13;  // SHCP
+
+// --- 桁選択ピン ---
+const int DIGIT_PINS[4] = {
+  3, 4, 5, 6
+};
+
+// true  = カソードコモン / 共阴极
+// false = アノードコモン / 共阳极
+const bool COMMON_CATHODE = true;
 
 // --- 7セグメントLED 点灯パターン ---
+// bit0=A, bit1=B, bit2=C, bit3=D, bit4=E, bit5=F, bit6=G, bit7=DP
 const byte NUM_PATTERNS[10] = {
   B00111111, // 0
   B00000110, // 1
@@ -28,205 +32,95 @@ const byte NUM_PATTERNS[10] = {
   B01101111  // 9
 };
 
-// --- 状態定義（ステートマシン） ---
-enum State {
-  IDLE,      // 待機中
-  RUNNING,   // カウントダウン中
-  PAUSED,    // 一時停止中
-  FINISHED   // 終了
+// 显示内容：1234
+int displayDigits[4] = {
+  1, 2, 3, 4
 };
 
-State currentState = IDLE;
+int currentDigit = 0;
+unsigned long lastRefreshTime = 0;
 
-// --- グローバル変数 ---
-int currentNumber = 9;
-unsigned long previousMillis = 0;
-const long interval = 1000;
-
-// 一時停止時に、1秒の途中経過を保存する
-unsigned long pausedElapsed = 0;
-
-// --- ボタン処理用変数 ---
-int lastButtonState = HIGH;
-int buttonState = HIGH;
-unsigned long lastDebounceTime = 0;
-const long debounceDelay = 50;
-
-// 長押し判定用
-unsigned long pressStartTime = 0;
-const long longPressTime = 1000;  // 1000ms以上で長押し
-bool longPressHandled = false;
+// 每一位点亮的时间，单位ms
+// 1〜3ms 左右都可以
+const unsigned long refreshInterval = 2;
 
 void setup() {
   pinMode(PIN_DATA, OUTPUT);
   pinMode(PIN_LATCH, OUTPUT);
   pinMode(PIN_CLOCK, OUTPUT);
-  pinMode(PIN_BUZZ, OUTPUT);
 
-  pinMode(PIN_BTN, INPUT_PULLUP);
+  for (int i = 0; i < 4; i++) {
+    pinMode(DIGIT_PINS[i], OUTPUT);
+  }
+
+  allDigitsOff();
+  sendSegments(0);
 
   Serial.begin(9600);
-  Serial.println("Timer Gadget Step2 Started.");
-
-  displayNumber(currentNumber);
+  Serial.println("4Digit Display Test Started.");
 }
 
 void loop() {
-  handleButton();
+  refreshDisplay();
+}
 
+// --- 动态点灯刷新 ---
+void refreshDisplay() {
   unsigned long currentMillis = millis();
 
-  switch (currentState) {
-    case IDLE:
-      digitalWrite(PIN_BUZZ, LOW);
-      break;
+  if (currentMillis - lastRefreshTime >= refreshInterval) {
+    lastRefreshTime = currentMillis;
 
-    case RUNNING:
-      // カウントダウン中の短い「ピッ」音
-      if (currentMillis - previousMillis < 50) {
-        digitalWrite(PIN_BUZZ, HIGH);
-      } else {
-        digitalWrite(PIN_BUZZ, LOW);
-      }
+    // 先全部关掉，防止残影
+    allDigitsOff();
 
-      // 1秒ごとに数字を減らす
-      if (currentMillis - previousMillis >= interval) {
-        previousMillis = currentMillis;
-        currentNumber--;
+    // 送出当前数字的段数据
+    int num = displayDigits[currentDigit];
+    sendSegments(NUM_PATTERNS[num]);
 
-        if (currentNumber <= 0) {
-          currentNumber = 0;
-          currentState = FINISHED;
-          Serial.println("Finished!");
-        }
+    // 打开当前这一位
+    digitOn(currentDigit);
 
-        displayNumber(currentNumber);
-        Serial.print("Countdown: ");
-        Serial.println(currentNumber);
-      }
-      break;
-
-    case PAUSED:
-      // 一時停止中はカウントもブザーも止める
-      digitalWrite(PIN_BUZZ, LOW);
-      break;
-
-    case FINISHED:
-      // 終了時のブザー
-      {
-        int cycle = currentMillis % 1000;
-
-        if (cycle < 400) {
-          if ((cycle / 50) % 2 == 0) {
-            digitalWrite(PIN_BUZZ, HIGH);
-          } else {
-            digitalWrite(PIN_BUZZ, LOW);
-          }
-        } else {
-          digitalWrite(PIN_BUZZ, LOW);
-        }
-      }
-      break;
-  }
-}
-
-// --- ボタン処理 ---
-void handleButton() {
-  int reading = digitalRead(PIN_BTN);
-
-  // 読み取り状態が変わったらチャタリング対策タイマーをリセット
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
-  }
-
-  // 状態が一定時間安定したら、正式なボタン状態として扱う
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading != buttonState) {
-      buttonState = reading;
-
-      // ボタンが押された瞬間
-      if (buttonState == LOW) {
-        pressStartTime = millis();
-        longPressHandled = false;
-      }
-
-      // ボタンが離された瞬間
-      if (buttonState == HIGH) {
-        if (!longPressHandled) {
-          handleShortPress();
-        }
-      }
+    // 下次显示下一位
+    currentDigit++;
+    if (currentDigit >= 4) {
+      currentDigit = 0;
     }
   }
-
-  // 押され続けている間に長押し判定
-  if (buttonState == LOW && !longPressHandled) {
-    if (millis() - pressStartTime >= longPressTime) {
-      handleLongPress();
-      longPressHandled = true;
-    }
-  }
-
-  lastButtonState = reading;
 }
 
-// --- 短押し処理 ---
-void handleShortPress() {
-  Serial.println("Short Press!");
+// --- 发送段数据到74HC595 ---
+void sendSegments(byte pattern) {
+  byte data = pattern;
 
-  if (currentState == IDLE) {
-    currentState = RUNNING;
-    currentNumber = 9;
-    previousMillis = millis();
-    displayNumber(currentNumber);
-    Serial.println("Started!");
+  // 如果是共阳极，段信号需要反转
+  if (!COMMON_CATHODE) {
+    data = ~pattern;
   }
-  else if (currentState == RUNNING) {
-    currentState = PAUSED;
-
-    // 1秒カウントの途中経過を保存
-    pausedElapsed = millis() - previousMillis;
-    pausedElapsed = pausedElapsed % interval;
-
-    digitalWrite(PIN_BUZZ, LOW);
-    Serial.println("Paused!");
-  }
-  else if (currentState == PAUSED) {
-    currentState = RUNNING;
-
-    // 一時停止前の途中経過を引き継いで再開
-    previousMillis = millis() - pausedElapsed;
-
-    Serial.println("Resumed!");
-  }
-  else if (currentState == FINISHED) {
-    resetTimer();
-    Serial.println("Reset from FINISHED!");
-  }
-}
-
-// --- 長押し処理 ---
-void handleLongPress() {
-  Serial.println("Long Press!");
-  resetTimer();
-}
-
-// --- リセット処理 ---
-void resetTimer() {
-  currentState = IDLE;
-  currentNumber = 9;
-  previousMillis = 0;
-  pausedElapsed = 0;
-  digitalWrite(PIN_BUZZ, LOW);
-  displayNumber(currentNumber);
-  Serial.println("Reset to IDLE!");
-}
-
-// --- 74HC595経由で7セグに数字を表示する関数 ---
-void displayNumber(int num) {
-  if (num < 0 || num > 9) return;
 
   digitalWrite(PIN_LATCH, LOW);
-  shiftOut(PIN_DATA, PIN_CLOCK, MSBFIRST, NUM_PATTERNS[num]);
+  shiftOut(PIN_DATA, PIN_CLOCK, MSBFIRST, data);
   digitalWrite(PIN_LATCH, HIGH);
+}
+
+// --- 打开指定桁 ---
+void digitOn(int digitIndex) {
+  if (COMMON_CATHODE) {
+    // 共阴极：该位公共端 LOW 时亮
+    digitalWrite(DIGIT_PINS[digitIndex], LOW);
+  } else {
+    // 共阳极：该位公共端 HIGH 时亮
+    digitalWrite(DIGIT_PINS[digitIndex], HIGH);
+  }
+}
+
+// --- 关闭所有桁 ---
+void allDigitsOff() {
+  for (int i = 0; i < 4; i++) {
+    if (COMMON_CATHODE) {
+      digitalWrite(DIGIT_PINS[i], HIGH);
+    } else {
+      digitalWrite(DIGIT_PINS[i], LOW);
+    }
+  }
 }
