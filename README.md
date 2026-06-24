@@ -1,26 +1,159 @@
-## 本日の学習内容
+1. 先追加缺少的音符
 
-本日は、今週の課題である音楽プレイヤー型の作品について、チームで仕様書、基本設計書、詳細設計書の作成と確認を行いました。
-実装作業にはまだ入っていませんが、作品全体としてどのような機能を持たせるか、各機能を誰が担当するか、また各機能同士をどのように連携させるかを整理しました。
+你原代码没有 NOTE_AS4，链接里的 Happy Birthday 用到了它。
+在 #define NOTE_A4 440 附近追加：
 
-自分は同じグループのメンバーと一緒に、音楽再生と表示に関する機能を担当することになっています。
-そのため、再生・停止・曲の切り替えなどの状態に応じて、音の出力や表示内容をどのように変化させるかを確認しました。
-また、仕様書では利用者から見た動作を整理し、基本設計書では機能ごとの役割、詳細設計書では実装時に必要になる処理の流れについて考えました。
+#define NOTE_AS4 466
+2. 修改 Track 结构体
 
-## Keep
+你现在的 durations 是 uint8_t，不能保存 -4、-2 这种负数。
+所以把原来的：
 
-実装に入る前に、チーム全体で仕様や担当範囲を確認できた点は良かったです。
-また、自分の担当である音楽再生機能と表示機能が、他のボタン操作や状態管理の機能と関係していることを意識できました。
-前回のタイマーガジェットで学んだブザー制御や表示処理の経験を、今回の課題にも活かせそうだと感じました。
+struct Track {
+  const uint16_t* melody;
+  const uint8_t* durations;
+  uint8_t length;
+  const char* name;
+};
 
-## Problem
+改成：
 
-仕様書、基本設計書、詳細設計書の違いを意識しながら内容を整理するのに少し時間がかかりました。
-また、今日は主に企画と設計書の作成が中心だったため、自分が担当する音楽再生と表示機能について、まだ具体的な処理や関数の構成までは十分に決められていません。
-特に、再生中・停止中・曲変更時などの状態ごとに、音と表示をどのように連動させるかを今後さらに整理する必要があると感じました。
+struct Track {
+  const uint16_t* melody;
+  const int8_t* durations;
+  uint8_t length;
+  const char* name;
+  uint16_t tempo;
+};
+3. 把所有 dur 数组的类型改一下
 
-## Try
+比如原来是：
 
-次回は、自分の担当範囲である音楽再生と表示機能について、必要な処理をより具体的に分けて考えたいです。
-例えば、再生、停止、曲切り替え、表示更新などの処理を状態ごとに整理し、どのタイミングでどの関数を呼び出すかを明確にしたいです。
-また、設計書の内容と実際のコードがずれないように、実装前に処理の流れや変数名を確認してから作業を進めたいです。
+const uint8_t durTwinkle[] = {
+
+改成：
+
+const int8_t durTwinkle[] = {
+
+其他几个也一样：
+
+const int8_t durKimigayo[] = {
+const int8_t durHappyBirthday[] = {
+const int8_t durHarryPotter[] = {
+
+原来那些正数 4, 8, 2 不受影响。
+
+4. 替换 Happy Birthday 的 melody 和 dur
+
+把你现在这两段：
+
+const uint16_t melodyHappyBirthday[] = {
+  ...
+};
+
+const uint8_t durHappyBirthday[] = {
+  ...
+};
+
+替换成这个：
+
+const uint16_t melodyHappyBirthday[] = {
+  NOTE_C4, NOTE_C4,
+  NOTE_D4, NOTE_C4, NOTE_F4,
+  NOTE_E4, NOTE_C4, NOTE_C4,
+
+  NOTE_D4, NOTE_C4, NOTE_G4,
+  NOTE_F4, NOTE_C4, NOTE_C4,
+
+  NOTE_C5, NOTE_A4, NOTE_F4,
+  NOTE_E4, NOTE_D4, NOTE_AS4, NOTE_AS4,
+
+  NOTE_A4, NOTE_F4, NOTE_G4,
+  NOTE_F4
+};
+
+const int8_t durHappyBirthday[] = {
+  4, 8,
+  -4, -4, -4,
+  -2, 4, 8,
+
+  -4, -4, -4,
+  -2, 4, 8,
+
+  -4, -4, -4,
+  -4, -4, 4, 8,
+
+  -4, -4, -4,
+  -2
+};
+
+这个就是把链接里的：
+
+NOTE_C4,4, NOTE_C4,8, ...
+
+拆成你项目需要的：
+
+melodyHappyBirthday[] = 音符
+durHappyBirthday[] = 时长
+5. 修改 tracks[] 注册部分
+
+你原来大概是这样：
+
+Track tracks[] = {
+  { melodyTwinkle, durTwinkle, ..., "きらきら星" },
+  { melodyKimigayo, durKimigayo, ..., "君が代" },
+  { melodyHappyBirthday, durHappyBirthday, ..., "happybirthday" },
+  { melodyHarryPotter, durHarryPotter, ..., "harrypotter" }
+};
+
+改成这样：
+
+Track tracks[] = {
+  { melodyTwinkle, durTwinkle, (uint8_t)(sizeof(melodyTwinkle) / sizeof(melodyTwinkle[0])), "きらきら星", 240 },
+  { melodyKimigayo, durKimigayo, (uint8_t)(sizeof(melodyKimigayo) / sizeof(melodyKimigayo[0])), "君が代", 240 },
+  { melodyHappyBirthday, durHappyBirthday, (uint8_t)(sizeof(melodyHappyBirthday) / sizeof(melodyHappyBirthday[0])), "happybirthday", 140 },
+  { melodyHarryPotter, durHarryPotter, (uint8_t)(sizeof(melodyHarryPotter) / sizeof(melodyHarryPotter[0])), "harrypotter", 240 }
+};
+
+这里 happybirthday 用 140，是因为链接里的原代码 tempo = 140。其他曲子先用 240，这样基本能保持你原来 1000 / duration 的速度感。
+
+6. 加一个计算音长的函数
+
+放在 updatePlayback() 前面即可：
+
+unsigned long calcNoteDurationMs(int8_t divider, uint16_t tempo) {
+  unsigned long wholeNote = (60000UL * 4) / tempo;
+
+  if (divider > 0) {
+    return wholeNote / divider;
+  }
+
+  if (divider < 0) {
+    unsigned long duration = wholeNote / abs(divider);
+    return duration + duration / 2;
+  }
+
+  return 0;
+}
+
+这个函数就是为了处理 -4、-2 这种附点音符。
+
+7. 修改 updatePlayback() 里的音长计算
+
+找到这行：
+
+noteDurationMs = 1000UL / tr.durations[playIndex];
+
+改成：
+
+noteDurationMs = calcNoteDurationMs(tr.durations[playIndex], tr.tempo);
+
+然后这里也建议稍微改一下，支持以后加休止符：
+
+if (currentVolumeRaw < 10 || tr.melody[playIndex] == 0) {
+  noTone(BUZZER_PIN);
+} else {
+  tone(BUZZER_PIN, tr.melody[playIndex], noteDurationMs);
+}
+
+这样改完之后，你的 Happy Birthday 就会接近链接里的版本，而不是现在这种过度简化版。
